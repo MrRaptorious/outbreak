@@ -1,6 +1,56 @@
 #include "raylib.h"
 #include <stdio.h>
 
+// TODO:
+// - use delta time!
+// - use:
+// https://learnopengl.com/In-Practice/2D-Game/Collisions/Collision-detection
+
+// Begin Definition: Stage
+
+struct Brick {
+  Vector2 position;
+  int width;
+  Color color;
+};
+
+struct Stage {
+  int id;
+  struct Brick *bricks;
+  int brick_count;
+  int brick_width;
+};
+
+void createStage(struct Stage *stage) {
+  int render_width = GetRenderWidth();
+  int num_bricks_in_row = 10;
+  float padding = 1;
+
+  float brick_width = (render_width - (padding * (num_bricks_in_row + 1))) /
+                      (num_bricks_in_row);
+
+  struct Brick *bricks;
+  bricks = MemAlloc(sizeof(struct Brick) * num_bricks_in_row);
+
+  if (!bricks) {
+    // handel error... or do we?
+  }
+
+  for (int i = 0; i < num_bricks_in_row; i++) {
+    bricks[i].color = (Color){GetRandomValue(0, 255), GetRandomValue(0, 255),
+                              GetRandomValue(0, 255), 255};
+    bricks[i].position.y = 50;
+    bricks[i].position.x = padding + brick_width * i + padding * i;
+  }
+
+  stage->id = 1;
+  stage->bricks = bricks;
+  stage->brick_count = num_bricks_in_row;
+  stage->brick_width = brick_width;
+}
+
+// End Definition: Stage
+
 // Begin Definition: Player
 struct Player {
   Vector2 position;
@@ -57,6 +107,9 @@ void loop() {
       .move_player = move_player,
   };
 
+  struct Stage s = {};
+  createStage(&s);
+
   // Gameloop
   while (!WindowShouldClose()) {
 
@@ -68,14 +121,22 @@ void loop() {
     // 1. CLEAR
     ClearBackground(WHITE);
 
-    // 2. DRAW PLAYER
+    // 2. DRAW PLAYER AND STAGE
     DrawRectangle(player.position.x, player.position.y, player.width, 10,
                   BLACK);
+
+    for (int i = 0; i < s.brick_count; i++) {
+      DrawRectangle(s.bricks[i].position.x, s.bricks[i].position.y,
+                    s.brick_width, 20, s.bricks[i].color);
+    }
 
     // 3. DRAW UI
     DrawFPS(0, 0);
     EndDrawing();
   }
+
+  // cleanup (here for now)
+  MemFree(s.bricks);
 }
 
 void cleanup() { CloseWindow(); }
