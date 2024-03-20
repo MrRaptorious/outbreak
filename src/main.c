@@ -53,7 +53,7 @@ struct Stage {
 void createStage(struct Stage *stage) {
   int render_width = GetRenderWidth();
   int num_bricks_in_row = 10;
-  int brick_height = 10;
+  int brick_height = 20;
   float padding = 1;
 
   float brick_width = (render_width - (padding * (num_bricks_in_row + 1))) /
@@ -103,6 +103,7 @@ void doCollision(struct Ball *ball, struct Stage *stage,
   // death zone
 
   // bricks
+  bool reflected_current_frame = false;
   for (int i = 0; i < stage->brick_count; i++) {
 
     if (stage->bricks[i].alive) {
@@ -118,11 +119,13 @@ void doCollision(struct Ball *ball, struct Stage *stage,
         // kill brick
         stage->bricks[i].alive = false;
 
-        // reflect ball
-        Vector2 new_direction =
-            Vector2Reflect(ball->direction, WALL_TOP_NORMAL);
-        ball->direction.y = new_direction.y;
-        ball->direction.x = new_direction.x;
+        if (!reflected_current_frame) {
+          Vector2 new_direction =
+              Vector2Reflect(ball->direction, WALL_TOP_NORMAL);
+          ball->direction.y = new_direction.y;
+          ball->direction.x = new_direction.x;
+          reflected_current_frame = true;
+        }
       }
     }
   }
