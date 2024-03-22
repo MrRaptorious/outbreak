@@ -379,7 +379,7 @@ void init() {
   int window_width = 800;
   int window_height = 600;
 
-  InitWindow(window_width, window_height, "Breakout");
+  InitWindow(window_width, window_height, "Outbreak");
   SetTargetFPS(100);
 }
 
