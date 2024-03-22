@@ -1,7 +1,7 @@
 RAYLIB_PATH = ../raylib/build/raylib/include
 CC = clang
-CFLAGS = -O0
-LDFLAGS = -lraylib
+CFLAGS = -O0 -DDEBUG
+LDFLAGS = -lraylib -lm
 SRC_DIR = src
 BUILD_DIR = build
 
