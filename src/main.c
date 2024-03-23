@@ -31,6 +31,7 @@ struct Player {
   int width;
   int height;
   float steering_strength;
+  int score;
 };
 
 struct Ball {
@@ -65,13 +66,25 @@ struct Settings {
   bool restart;
   Rectangle kill_box;
   bool mouse_mode;
+  bool draw_fps;
+};
+
+struct Game {
+  Vector2 window_size;
+  Rectangle ui_area;
+  Rectangle play_area;
+  int target_fps;
 };
 
 // ############################## End Structs ##############################
 
+// ######################### Global vars ############################
+struct Game *game;
+// ######################### End Global vars ############################
+
 // ############################## Setup Functions ##############################
 void createStage(struct Stage *stage) {
-  int render_width = GetRenderWidth();
+  int render_width = game->play_area.width;
   int num_bricks_in_row = 20;
   int rows = 4;
   int brick_height = 20;
@@ -140,7 +153,9 @@ void visualizePlayer(struct Player *player, struct Settings *settings) {
       Vector2 end = {origin.x - normal.x * normal_scale,
                      origin.y - normal_scale};
 
-      DrawLine(origin.x, origin.y, end.x, end.y, NORMAL_COLOR);
+      DrawLine(origin.x + game->play_area.x, origin.y + game->play_area.y,
+               end.x + game->play_area.x, end.y + game->play_area.y,
+               NORMAL_COLOR);
     }
 
   } else {
@@ -164,14 +179,16 @@ void visualizePlayer(struct Player *player, struct Settings *settings) {
       Vector2 end = {origin.x - normal.x * normal_scale,
                      origin.y - normal_scale};
 
-      DrawLine(origin.x, origin.y, end.x, end.y, NORMAL_COLOR);
+      DrawLine(origin.x + game->play_area.x, origin.y + game->play_area.y,
+               end.x + game->play_area.x, end.y + game->play_area.y,
+               NORMAL_COLOR);
     }
   }
 }
 
 void spawnBall(struct Ball *ball) {
-  int render_width = GetRenderWidth();
-  int render_height = GetRenderHeight();
+  int render_width = game->play_area.width;
+  int render_height = game->play_area.height;
 
   ball->size = 10;
   ball->color = BLACK;
@@ -182,7 +199,8 @@ void spawnBall(struct Ball *ball) {
 
 void visualizeBoxes(struct Settings *settings) {
 
-  DrawRectangle(settings->kill_box.x, settings->kill_box.y,
+  DrawRectangle(settings->kill_box.x + game->play_area.x,
+                settings->kill_box.y + game->play_area.y,
                 settings->kill_box.width, settings->kill_box.height,
                 (Color){255, 0, 0, 100});
 }
@@ -192,7 +210,8 @@ void visualizeBricks(struct Settings *settings, struct Stage *stage) {
     Color transparent = stage->bricks[i].color;
     transparent.a = 50;
 
-    DrawRectangle(stage->bricks[i].position.x, stage->bricks[i].position.y,
+    DrawRectangle(stage->bricks[i].position.x + game->play_area.x,
+                  stage->bricks[i].position.y + game->play_area.y,
                   stage->brick_width, stage->brick_height, transparent);
   }
 }
@@ -230,16 +249,22 @@ void doCollision(struct Ball *ball, struct Stage *stage, struct Player *player,
           .height = stage->brick_height,
       };
 
-      if (CheckCollisionRecs(brick_collision, ball_box)) {
-        // kill brick
-        stage->bricks[i].alive = false;
+      // only check if brick is alive
+      if (stage->bricks[i].alive) {
+        if (CheckCollisionRecs(brick_collision, ball_box)) {
+          // kill brick
+          stage->bricks[i].alive = false;
 
-        if (!reflected_current_frame) {
-          Vector2 new_direction =
-              Vector2Reflect(ball->direction, WALL_TOP_NORMAL);
-          ball->direction.y = new_direction.y;
-          ball->direction.x = new_direction.x;
-          reflected_current_frame = true;
+          if (!reflected_current_frame) {
+            // TODO: reflect based on hit position!
+            Vector2 new_direction =
+                Vector2Reflect(ball->direction, WALL_TOP_NORMAL);
+            ball->direction.y = new_direction.y;
+            ball->direction.x = new_direction.x;
+            reflected_current_frame = true;
+          }
+
+          player->score += 10;
         }
       }
     }
@@ -298,8 +323,8 @@ void doCollision(struct Ball *ball, struct Stage *stage, struct Player *player,
   }
 
   // WALLS
-  int render_width = GetRenderWidth();
-  int render_height = GetRenderHeight();
+  int render_width = game->play_area.width;
+  int render_height = game->play_area.height;
 
   if (ball->position.x <= 0) {
     ball->position.x = 0;
@@ -331,7 +356,7 @@ void moveBall(struct Ball *ball) {
 }
 
 void movePlayer(struct Player *player) {
-  int render_width = GetRenderWidth();
+  int render_width = game->play_area.width;
   // move left
   if (IsKeyDown(KEY_H) && player->position.x > 0) {
     player->position.x -= player->speed;
@@ -352,7 +377,7 @@ void movePlayer(struct Player *player) {
 }
 
 void handleInputs(struct Settings *settings, struct Ball *ball,
-                  struct Stage *stage) {
+                  struct Stage *stage, struct Player *player) {
   if (IsKeyDown(KEY_V)) {
     settings->radius += 1;
   }
@@ -398,10 +423,20 @@ void handleInputs(struct Settings *settings, struct Ball *ball,
     MemFree(stage->bricks);
     createStage(stage);
     spawnBall(ball);
+    player->score = 0;
   }
 
   if (IsKeyPressed(KEY_M)) {
     settings->mouse_mode = !settings->mouse_mode;
+  }
+
+  if (IsKeyPressed(KEY_Q)) {
+    settings->draw_fps = !settings->draw_fps;
+    if (settings->draw_fps) {
+      printf("Debug-mode enabled");
+    } else {
+      printf("Debug-mode disabled");
+    }
   }
 }
 // ############################ End Tick Functions ############################
@@ -409,16 +444,15 @@ void handleInputs(struct Settings *settings, struct Ball *ball,
 void init() {
   printf("Raylib Version: %s", RAYLIB_VERSION);
 
-  int window_width = 800;
-  int window_height = 600;
+  assert(game != NULL);
 
-  InitWindow(window_width, window_height, "Outbreak");
-  SetTargetFPS(100);
+  InitWindow(game->window_size.x, game->window_size.y, "Outbreak");
+  SetTargetFPS(game->target_fps);
 }
 
 void loop() {
-  int render_width = GetRenderWidth();
-  int render_height = GetRenderHeight();
+  int render_width = game->play_area.width;
+  int render_height = game->play_area.height;
   int player_width = 100;
   int player_height = 10;
   int bottom_offset = 50;
@@ -431,6 +465,7 @@ void loop() {
       .steering_strength = steering_strength,
       .position = {(render_width / 2.0) - player_width / 2.0,
                    render_height - bottom_offset},
+      .score = 0,
   };
 
   struct Stage stage = {};
@@ -449,23 +484,24 @@ void loop() {
       .kill_box =
           {
               .x = 0,
-              .y = render_height - 10,
-              .width = render_width,
+              .y = game->play_area.height - 10,
+              .width = game->play_area.width,
               .height = 10,
           },
       .mouse_mode = false,
+      .draw_fps = true,
   };
 
   // Gameloop
   while (!WindowShouldClose()) {
-    handleInputs(&settings, &ball, &stage);
+    handleInputs(&settings, &ball, &stage, &player);
     doCollision(&ball, &stage, &player, &settings);
     movePlayer(&player);
     if (!settings.mouse_mode) {
       moveBall(&ball);
     } else {
-      ball.position.x = GetMouseX();
-      ball.position.y = GetMouseY();
+      ball.position.x = GetMouseX() - game->play_area.x;
+      ball.position.y = GetMouseY() - game->play_area.y;
     }
     BeginDrawing();
     {
@@ -473,24 +509,36 @@ void loop() {
       ClearBackground(WHITE);
 
       // ############ PLAYER ############
-      DrawRectangle(player.position.x, player.position.y, player.width, 10,
+      DrawRectangle(player.position.x + game->ui_area.x,
+                    player.position.y + game->play_area.y, player.width, 10,
                     BLACK);
 
       // ############ BRICKS ############
       for (int i = 0; i < stage.brick_count; i++) {
         if (stage.bricks[i].alive) {
-          DrawRectangle(stage.bricks[i].position.x, stage.bricks[i].position.y,
+          DrawRectangle(stage.bricks[i].position.x + game->play_area.x,
+                        stage.bricks[i].position.y + game->play_area.y,
                         stage.brick_width, stage.brick_height,
                         stage.bricks[i].color);
         }
       }
 
       // ############ BALL ############
-      DrawRectangle(ball.position.x, ball.position.y, ball.size, ball.size,
+      DrawRectangle(ball.position.x + game->play_area.x,
+                    ball.position.y + game->play_area.y, ball.size, ball.size,
                     ball.color);
 
       // ############ UI ############
-      DrawFPS(0, 0);
+      DrawRectangle(game->ui_area.x, game->ui_area.y, game->ui_area.width,
+                    game->ui_area.height, BLACK);
+
+      DrawText(TextFormat("Score: %d", player.score),
+               game->ui_area.x + game->ui_area.width - 130,
+               game->ui_area.y + game->ui_area.height / 2 - 10, 20, WHITE);
+
+      if (settings.draw_fps) {
+        DrawFPS(0, 0);
+      }
 
       // ############ DEBUG ############
       // #ifdef DEBUG
@@ -511,6 +559,32 @@ void loop() {
 void cleanup() { CloseWindow(); }
 
 int main(void) {
+
+  int window_width = 800;
+  int window_height = 600;
+  int ui_height = 50;
+
+  struct Game local_game = {
+      .window_size = {window_width, window_height},
+      .ui_area =
+          {
+              .x = 0,
+              .y = 0,
+              .width = window_width,
+              .height = ui_height,
+          },
+      .play_area =
+          {
+              .x = 0,
+              .y = ui_height,
+              .height = window_height - ui_height,
+              .width = window_width,
+          },
+      .target_fps = 100,
+  };
+
+  game = &local_game;
+
   init();
   loop();
   cleanup();
