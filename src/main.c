@@ -14,10 +14,15 @@
   (Vector2) { 0, 1 }
 #define PLAYER_NORMAL                                                          \
   (Vector2) { 0, -1 }
+#define NORMAL_COLOR                                                           \
+  (Color) { 255, 140, 0, 150 }
 
 // TODO:
 // - use delta time!
 // https://learnopengl.com/In-Practice/2D-Game/Collisions/Collision-detection
+// - use shaders
+// - portals
+// - ui with score
 
 // ############################## Structs ##############################
 struct Player {
@@ -59,6 +64,7 @@ struct Settings {
   bool debug_mode;
   bool restart;
   Rectangle kill_box;
+  bool mouse_mode;
 };
 
 // ############################## End Structs ##############################
@@ -67,30 +73,42 @@ struct Settings {
 void createStage(struct Stage *stage) {
   int render_width = GetRenderWidth();
   int num_bricks_in_row = 20;
+  int rows = 4;
   int brick_height = 20;
   float padding = 1;
+  int base_offset = 50;
 
   float brick_width = (render_width - (padding * (num_bricks_in_row + 1))) /
                       (num_bricks_in_row);
 
   struct Brick *bricks;
-  bricks = MemAlloc(sizeof(struct Brick) * num_bricks_in_row);
+  bricks = MemAlloc(sizeof(struct Brick) * num_bricks_in_row * rows);
 
   if (!bricks) {
     // handel error... or do we?
   }
 
-  for (int i = 0; i < num_bricks_in_row; i++) {
-    bricks[i].color = (Color){GetRandomValue(0, 255), GetRandomValue(0, 255),
-                              GetRandomValue(0, 255), 255};
-    bricks[i].position.y = 50;
-    bricks[i].position.x = padding + brick_width * i + padding * i;
-    bricks[i].alive = true;
+  for (int row = 0; row < rows; row++) {
+    int y_pos = base_offset + (row * (brick_height + padding));
+
+    for (int column = 0; column < num_bricks_in_row; column++) {
+      int position = (row * num_bricks_in_row) + column;
+      bricks[position].color =
+          (Color){GetRandomValue(0, 255), GetRandomValue(0, 255),
+                  GetRandomValue(0, 255), 255};
+      bricks[position].color =
+          (Color){((row + 1) * 10) % 255, ((row + 1) * 60) % 255,
+                  ((row + 1) * 40) % 255, 255};
+      bricks[position].position.y = y_pos;
+      bricks[position].position.x =
+          padding + brick_width * column + padding * column;
+      bricks[position].alive = true;
+    }
   }
 
   stage->id = 1;
   stage->bricks = bricks;
-  stage->brick_count = num_bricks_in_row;
+  stage->brick_count = num_bricks_in_row * rows;
   stage->brick_width = brick_width;
   stage->brick_height = brick_height;
 }
@@ -122,11 +140,11 @@ void visualizePlayer(struct Player *player, struct Settings *settings) {
       Vector2 end = {origin.x - normal.x * normal_scale,
                      origin.y - normal_scale};
 
-      DrawLine(origin.x, origin.y, end.x, end.y, ORANGE);
+      DrawLine(origin.x, origin.y, end.x, end.y, NORMAL_COLOR);
     }
 
   } else {
-    for (int i = 0; i < player->width; i++) {
+    for (int i = 0; i < player->width; i += 2) {
 
       float player_x_i = player->position.x + i;
       float hit_offset_x =
@@ -146,7 +164,7 @@ void visualizePlayer(struct Player *player, struct Settings *settings) {
       Vector2 end = {origin.x - normal.x * normal_scale,
                      origin.y - normal_scale};
 
-      DrawLine(origin.x, origin.y, end.x, end.y, ORANGE);
+      DrawLine(origin.x, origin.y, end.x, end.y, NORMAL_COLOR);
     }
   }
 }
@@ -168,6 +186,17 @@ void visualizeBoxes(struct Settings *settings) {
                 settings->kill_box.width, settings->kill_box.height,
                 (Color){255, 0, 0, 100});
 }
+
+void visualizeBricks(struct Settings *settings, struct Stage *stage) {
+  for (int i = 0; i < stage->brick_count; i++) {
+    Color transparent = stage->bricks[i].color;
+    transparent.a = 50;
+
+    DrawRectangle(stage->bricks[i].position.x, stage->bricks[i].position.y,
+                  stage->brick_width, stage->brick_height, transparent);
+  }
+}
+
 // ########################### End Util Functions ###########################
 
 // ############################## Tick Functions ##############################
@@ -366,12 +395,16 @@ void handleInputs(struct Settings *settings, struct Ball *ball,
     settings->restart = false;
     printf("Restarting Game\n");
 
+    MemFree(stage->bricks);
     createStage(stage);
     spawnBall(ball);
   }
+
+  if (IsKeyPressed(KEY_M)) {
+    settings->mouse_mode = !settings->mouse_mode;
+  }
 }
-// ############################ End Tick Functions
-// ############################
+// ############################ End Tick Functions ############################
 
 void init() {
   printf("Raylib Version: %s", RAYLIB_VERSION);
@@ -411,7 +444,7 @@ void loop() {
       .player_slope_scale = -.6,
       .a = .1,
       .use_function = false,
-      .debug_mode = true,
+      .debug_mode = false,
       .restart = false,
       .kill_box =
           {
@@ -420,6 +453,7 @@ void loop() {
               .width = render_width,
               .height = 10,
           },
+      .mouse_mode = false,
   };
 
   // Gameloop
@@ -427,8 +461,12 @@ void loop() {
     handleInputs(&settings, &ball, &stage);
     doCollision(&ball, &stage, &player, &settings);
     movePlayer(&player);
-    moveBall(&ball);
-
+    if (!settings.mouse_mode) {
+      moveBall(&ball);
+    } else {
+      ball.position.x = GetMouseX();
+      ball.position.y = GetMouseY();
+    }
     BeginDrawing();
     {
       // ############ CLEAR ############
@@ -459,6 +497,7 @@ void loop() {
       if (settings.debug_mode) {
         visualizePlayer(&player, &settings);
         visualizeBoxes(&settings);
+        visualizeBricks(&settings, &stage);
       }
       // #endif
     }
