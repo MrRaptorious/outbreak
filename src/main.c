@@ -1,21 +1,14 @@
+#include "colorConversion.h"
+#include "debugUtil.h"
+#include "definitions.h"
 #include "raylib.h"
 #include "raymath.h"
+#include "structs.h"
 #include <assert.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-#define WALL_LEFT_NORMAL                                                       \
-  (Vector2) { 1, 0 }
-#define WALL_RIGHT_NORMAL                                                      \
-  (Vector2) { -1, 0 }
-#define WALL_TOP_NORMAL                                                        \
-  (Vector2) { 0, 1 }
-#define PLAYER_NORMAL                                                          \
-  (Vector2) { 0, -1 }
-#define NORMAL_COLOR                                                           \
-  (Color) { 255, 140, 0, 150 }
 
 // TODO:
 // - use delta time!
@@ -23,72 +16,45 @@
 // - use shaders
 // - portals
 // - ui with score
+// - create multiple rooms
 
-// ############################## Structs ##############################
-struct Player {
-  Vector2 position;
-  float speed;
-  int width;
-  int height;
-  float steering_strength;
-  int score;
-};
-
-struct Ball {
-  Vector2 position;
-  int size;
-  float speed;
-  Vector2 direction;
-  Color color;
-};
-
-struct Brick {
-  Vector2 position;
-  int width;
-  Color color;
-  bool alive;
-};
-
-struct Stage {
-  int id;
-  struct Brick *bricks;
-  int brick_count;
-  int brick_width;
-  int brick_height;
-};
-
-struct Settings {
-  float radius;
-  float player_slope_scale;
-  float a;
-  bool use_function;
-  bool debug_mode;
-  bool restart;
-  Rectangle kill_box;
-  bool mouse_mode;
-  bool draw_fps;
-};
-
-struct Game {
-  Vector2 window_size;
-  Rectangle ui_area;
-  Rectangle play_area;
-  int target_fps;
-};
-
-// ############################## End Structs ##############################
+// TODO: NEXT:
+// enhance room loading
 
 // ######################### Global vars ############################
 struct Game *game;
 // ######################### End Global vars ############################
 
-// ############################## Setup Functions ##############################
-void createStage(struct Stage *stage) {
+// ############################ Util Functions ############################
+void spawnBall(struct Ball *ball) {
   int render_width = game->play_area.width;
-  int num_bricks_in_row = 20;
-  int rows = 4;
-  int brick_height = 20;
-  float padding = 1;
+  int render_height = game->play_area.height;
+
+  ball->size = 10;
+  ball->color = BLACK;
+  ball->speed = 5;
+  ball->position = (Vector2){.x = render_width / 2.0, .y = render_height / 2.0};
+  ball->direction = (Vector2){-.1, -1};
+}
+// ########################### End Util Functions ###########################
+
+// ############################## Setup Functions ##############################
+void createStage(struct Stage *stage, int id, int num_bricks_in_row, int rows,
+                 Vector2 position_world, Color base_color) {
+  stage->id = id;
+  stage->base_color = base_color;
+  stage->brick_count = num_bricks_in_row * rows;
+  stage->position_world = position_world;
+  stage->kill_box = (Rectangle){
+      .x = 0,
+      .y = game->play_area.height,
+      .width = game->play_area.width,
+      .height = 20,
+  };
+
+  int render_width = game->play_area.width;
+  int brick_height = 50;
+  float padding = 2;
   int base_offset = 50;
 
   float brick_width = (render_width - (padding * (num_bricks_in_row + 1))) /
@@ -104,122 +70,30 @@ void createStage(struct Stage *stage) {
   for (int row = 0; row < rows; row++) {
     int y_pos = base_offset + (row * (brick_height + padding));
 
+    Vector3 hsl_color =
+        rgb2hsl(stage->base_color.r, stage->base_color.g, stage->base_color.b);
+
+    hsl_color.z += 0.1 * (row + 1);
+
+    Color row_color = hsl2rgb(hsl_color.x, hsl_color.y, hsl_color.z);
+
     for (int column = 0; column < num_bricks_in_row; column++) {
       int position = (row * num_bricks_in_row) + column;
-      bricks[position].color =
-          (Color){GetRandomValue(0, 255), GetRandomValue(0, 255),
-                  GetRandomValue(0, 255), 255};
-      bricks[position].color =
-          (Color){((row + 1) * 10) % 255, ((row + 1) * 60) % 255,
-                  ((row + 1) * 40) % 255, 255};
-      bricks[position].position.y = y_pos;
-      bricks[position].position.x =
+      bricks[position].color = row_color;
+      bricks[position].position_stage.y = y_pos;
+      bricks[position].position_stage.x =
           padding + brick_width * column + padding * column;
       bricks[position].alive = true;
     }
   }
 
-  stage->id = 1;
   stage->bricks = bricks;
-  stage->brick_count = num_bricks_in_row * rows;
   stage->brick_width = brick_width;
   stage->brick_height = brick_height;
 }
 // ############################ End Setup Functions ############################
 
-// ############################ Util Functions ############################
-
-void visualizePlayer(struct Player *player, struct Settings *settings) {
-  if (settings->use_function) {
-    for (int i = 0; i < player->width; i++) {
-
-      float player_x_i = player->position.x + i;
-      float hit_position_local =
-          player_x_i - (player->position.x + (player->width / 2.0));
-
-      float hit_position_normalized =
-          hit_position_local / (player->width / 2.0);
-
-      float hit_scaled = hit_position_normalized * settings->player_slope_scale;
-      float x = hit_position_normalized;
-
-      float m = -1 / (4.0 * settings->a * powf(x, 3));
-
-      Vector2 normal = Vector2Normalize((Vector2){hit_scaled, m});
-      normal.x = hit_scaled;
-
-      float normal_scale = 150;
-      Vector2 origin = {player_x_i, player->position.y};
-      Vector2 end = {origin.x - normal.x * normal_scale,
-                     origin.y - normal_scale};
-
-      DrawLine(origin.x + game->play_area.x, origin.y + game->play_area.y,
-               end.x + game->play_area.x, end.y + game->play_area.y,
-               NORMAL_COLOR);
-    }
-
-  } else {
-    for (int i = 0; i < player->width; i += 2) {
-
-      float player_x_i = player->position.x + i;
-      float hit_offset_x =
-          -((player->position.x + (player->width / 2.0)) - player_x_i);
-
-      float d = settings->radius + player->position.y;
-      float theta = hit_offset_x / settings->radius;
-
-      Vector2 projected = {hit_offset_x + d * sin(theta),
-                           player->position.y + cos(theta)};
-
-      Vector2 normal =
-          Vector2Normalize(Vector2Subtract((Vector2){0, 0}, projected));
-
-      float normal_scale = 150;
-      Vector2 origin = {player_x_i, player->position.y};
-      Vector2 end = {origin.x - normal.x * normal_scale,
-                     origin.y - normal_scale};
-
-      DrawLine(origin.x + game->play_area.x, origin.y + game->play_area.y,
-               end.x + game->play_area.x, end.y + game->play_area.y,
-               NORMAL_COLOR);
-    }
-  }
-}
-
-void spawnBall(struct Ball *ball) {
-  int render_width = game->play_area.width;
-  int render_height = game->play_area.height;
-
-  ball->size = 10;
-  ball->color = BLACK;
-  ball->speed = 4;
-  ball->position = (Vector2){.x = render_width / 2.0, .y = render_height / 2.0};
-  ball->direction = (Vector2){-.1, -1};
-}
-
-void visualizeBoxes(struct Settings *settings) {
-
-  DrawRectangle(settings->kill_box.x + game->play_area.x,
-                settings->kill_box.y + game->play_area.y,
-                settings->kill_box.width, settings->kill_box.height,
-                (Color){255, 0, 0, 100});
-}
-
-void visualizeBricks(struct Settings *settings, struct Stage *stage) {
-  for (int i = 0; i < stage->brick_count; i++) {
-    Color transparent = stage->bricks[i].color;
-    transparent.a = 50;
-
-    DrawRectangle(stage->bricks[i].position.x + game->play_area.x,
-                  stage->bricks[i].position.y + game->play_area.y,
-                  stage->brick_width, stage->brick_height, transparent);
-  }
-}
-
-// ########################### End Util Functions ###########################
-
 // ############################## Tick Functions ##############################
-
 void doCollision(struct Ball *ball, struct Stage *stage, struct Player *player,
                  struct Settings *settings) {
   // go through each brick and check collision with the ball
@@ -232,7 +106,7 @@ void doCollision(struct Ball *ball, struct Stage *stage, struct Player *player,
   };
 
   // death zone
-  if (CheckCollisionRecs(settings->kill_box, ball_box)) {
+  if (CheckCollisionRecs(stage->kill_box, ball_box)) {
     settings->restart = true;
   }
 
@@ -243,8 +117,8 @@ void doCollision(struct Ball *ball, struct Stage *stage, struct Player *player,
     if (stage->bricks[i].alive) {
 
       Rectangle brick_collision = {
-          .x = stage->bricks[i].position.x,
-          .y = stage->bricks[i].position.y,
+          .x = stage->bricks[i].position_stage.x,
+          .y = stage->bricks[i].position_stage.y,
           .width = stage->brick_width,
           .height = stage->brick_height,
       };
@@ -346,13 +220,29 @@ void doCollision(struct Ball *ball, struct Stage *stage, struct Player *player,
   }
 }
 
-void moveBall(struct Ball *ball) {
-  Vector2 new_pos =
-      Vector2Add(ball->position, (Vector2){ball->direction.x * ball->speed,
-                                           ball->direction.y * ball->speed});
+void moveBall(struct Game *game, struct Ball *ball) {
+  if (!game->player->is_holding_ball) {
+    if (game->settings->mouse_mode) {
+      Vector2 mouse_pos =
+          GetScreenToWorld2D((Vector2){GetMouseX(), GetMouseY()}, game->camera);
+      ball->position.x = mouse_pos.x;
+      ball->position.y = mouse_pos.y - game->ui_area.height;
+    } else {
+      Vector2 new_pos = Vector2Add(ball->position,
+                                   (Vector2){ball->direction.x * ball->speed,
+                                             ball->direction.y * ball->speed});
+      ball->position.x = new_pos.x;
+      ball->position.y = new_pos.y;
+    }
+  } else {
 
-  ball->position.x = new_pos.x;
-  ball->position.y = new_pos.y;
+    Vector2 new_pos =
+        (Vector2){game->player->position.x + game->player->width / 2.0,
+                  game->player->position.y - 50};
+
+    ball->position.x = new_pos.x;
+    ball->position.y = new_pos.y;
+  }
 }
 
 void movePlayer(struct Player *player) {
@@ -376,8 +266,8 @@ void movePlayer(struct Player *player) {
   }
 }
 
-void handleInputs(struct Settings *settings, struct Ball *ball,
-                  struct Stage *stage, struct Player *player) {
+void handleDebugInputs(struct Settings *settings, struct Ball *ball,
+                       struct Stage *stage, struct Player *player) {
   if (IsKeyDown(KEY_V)) {
     settings->radius += 1;
   }
@@ -405,23 +295,52 @@ void handleInputs(struct Settings *settings, struct Ball *ball,
     settings->a -= .001;
     printf("a:%f\n", settings->a);
   }
+}
+
+void handleControlls(struct Settings *settings, struct Player *player,
+                     struct Ball *ball) {
+  if (IsKeyPressed(KEY_S)) {
+    if (game->current_stage > 0) {
+      game->current_stage--;
+      game->move_camera = true;
+      game->player->is_holding_ball = true;
+
+      if (ball->direction.y > 0) {
+        ball->direction.y = -ball->direction.y;
+      }
+    }
+  } else if (IsKeyPressed(KEY_F)) {
+    if (game->current_stage < game->num_stages - 1) {
+      game->current_stage++;
+      game->move_camera = true;
+      game->player->is_holding_ball = true;
+
+      if (ball->direction.y > 0) {
+        ball->direction.y = -ball->direction.y;
+      }
+    }
+  }
+
+  if (IsKeyPressed(KEY_SPACE)) {
+    game->player->is_holding_ball = false;
+  }
 
   if (IsKeyPressed(KEY_D)) {
 
     settings->debug_mode = !settings->debug_mode;
     if (settings->debug_mode) {
-      printf("Debug-mode enabled");
+      printf("Debug-mode enabled\n");
     } else {
-      printf("Debug-mode disabled");
+      printf("Debug-mode disabled\n");
     }
   }
 
   if (IsKeyPressed(KEY_N) || settings->restart) {
     settings->restart = false;
-    printf("Restarting Game\n");
+    printf("Respawn Player\n");
 
-    MemFree(stage->bricks);
-    createStage(stage);
+    player->score = fmax(player->score - 100, 0);
+
     spawnBall(ball);
     player->score = 0;
   }
@@ -453,116 +372,203 @@ void init() {
 void loop() {
   int render_width = game->play_area.width;
   int render_height = game->play_area.height;
+  struct Stage *stages_to_render[2];
+  int num_stages_to_render = 1;
+
+  struct Ball ball;
+  spawnBall(&ball);
+
+  struct Stage stage1 = {};
+  createStage(&stage1, 1, 20, 3, (Vector2){0, 0}, (Color){19, 19, 69, 255});
+
+  struct Stage stage2 = {};
+  createStage(&stage2, 2, 20, 3, (Vector2){1920, 0}, (Color){69, 19, 46, 255});
+
+  // link stages
+  stage1.right = &stage2;
+  stage1.left = NULL;
+  stage2.left = &stage1;
+  stage2.right = NULL;
+
+  game->current_stage = 0;
+  game->stages[0] = &stage1;
+  game->stages[1] = &stage2;
+  game->num_stages = 2;
+
+  // set startup stage
+  stages_to_render[0] = &stage1;
+
+  // shortcuts for structs
+  struct Player *player = game->player;
+  Camera2D *camera = &(game->camera);
+
+  // camera targets
+  struct Stage *start = &stage1;
+  struct Stage *end = &stage1;
+
+  // Gameloop
+  while (!WindowShouldClose()) {
+    struct Stage *old_stage = game->stages[game->current_stage];
+
+    // ##### Update #####
+    // Update stuff like movement, collision etc.
+    handleControlls(game->settings, player, &ball);
+    doCollision(&ball, game->stages[game->current_stage], player,
+                game->settings);
+    movePlayer(player);
+    moveBall(game, &ball);
+
+    struct Stage *current_stage = game->stages[game->current_stage];
+
+    // ##### Late-Update #####
+    // Update stuff which depends on the updated values of before, like camera
+    // movement etc.
+    if (game->move_camera) {
+      start = old_stage;
+      end = current_stage;
+      game->move_camera = false;
+    }
+
+    if (fabs(end->position_world.x - camera->target.x) > 5) {
+      // move camera
+      Vector2 smoothed =
+          Vector2Lerp(game->camera.target, end->position_world, 0.04);
+      camera->target = smoothed;
+
+      // calculate next move to snap to target
+      if (fabs(end->position_world.x - camera->target.x) <= 5) {
+        camera->target = end->position_world;
+      }
+
+      // check what should be rendered
+      stages_to_render[0] = start;
+      stages_to_render[1] = end;
+      num_stages_to_render = 2;
+    } else {
+      // check what should be rendered
+      num_stages_to_render = 1;
+      stages_to_render[0] = current_stage;
+      start = current_stage;
+      end = current_stage;
+    }
+
+    // ##### Render #####
+    BeginDrawing();
+    {
+      // ############ CLEAR ############
+      ClearBackground(WHITE);
+      BeginMode2D(*camera);
+
+      // ############ PLAYER ############
+      DrawRectangle(player->position.x + game->ui_area.x +
+                        current_stage->position_world.x,
+                    player->position.y + game->play_area.y +
+                        current_stage->position_world.y,
+                    player->width, 10, BLACK);
+
+      // ############ BRICKS ############
+
+      for (int i = 0; i < num_stages_to_render; i++) {
+
+        current_stage = stages_to_render[i];
+
+        for (int i = 0; i < current_stage->brick_count; i++) {
+          if (current_stage->bricks[i].alive) {
+            DrawRectangle(
+                current_stage->bricks[i].position_stage.x + game->play_area.x +
+                    current_stage->position_world.x,
+                current_stage->bricks[i].position_stage.y + game->play_area.y +
+                    current_stage->position_world.y,
+                current_stage->brick_width, current_stage->brick_height,
+                current_stage->bricks[i].color);
+          }
+        }
+      }
+
+      // ############ BALL ############
+      DrawRectangle(
+          ball.position.x + game->play_area.x + current_stage->position_world.x,
+          ball.position.y + game->play_area.y + current_stage->position_world.y,
+          ball.size, ball.size, ball.color);
+
+      // ############ DEBUG ############
+      // #ifdef DEBUG
+      if (game->settings->debug_mode) {
+        visualizePlayer(game, player, game->settings, current_stage);
+        visualizeBoxes(game, game->settings, current_stage);
+        visualizeBricks(game, game->settings, current_stage);
+        visualizeBall(game, &ball, current_stage);
+      }
+      // #endif
+      EndMode2D();
+
+      // ############ UI ############
+      DrawRectangle(game->ui_area.x, game->ui_area.y, game->ui_area.width,
+                    game->ui_area.height, BLACK);
+
+      DrawText(TextFormat("Score: %d", player->score),
+               game->ui_area.x + game->ui_area.width - 130,
+               game->ui_area.y + game->ui_area.height / 2 - 10, 20, WHITE);
+
+      if (game->settings->draw_fps) {
+        DrawFPS(0, 0);
+      }
+    }
+    EndDrawing();
+  }
+
+  // cleanup (here for now)
+  MemFree(stage1.bricks);
+  MemFree(stage2.bricks);
+}
+
+void cleanup() { CloseWindow(); }
+
+int main(void) {
+  int window_width = 960;
+  int window_height = 540;
+  int ui_height = 30;
+  Vector2 room_size = (Vector2){1920, 1080};
   int player_width = 100;
   int player_height = 10;
   int bottom_offset = 50;
   float steering_strength = .5;
+  Rectangle play_area = {
+      .x = 0,
+      .y = ui_height,
+      .height = room_size.y - ui_height,
+      .width = room_size.x,
+  };
 
   struct Player player = {
       .speed = 5,
       .width = player_width,
       .height = player_height,
       .steering_strength = steering_strength,
-      .position = {(render_width / 2.0) - player_width / 2.0,
-                   render_height - bottom_offset},
+      .position = {(play_area.width / 2.0) - player_width / 2.0,
+                   play_area.height - bottom_offset},
       .score = 0,
+      .is_holding_ball = true,
   };
-
-  struct Stage stage = {};
-  createStage(&stage);
-
-  struct Ball ball;
-  spawnBall(&ball);
 
   struct Settings settings = {
       .radius = 1000,
       .player_slope_scale = -.6,
       .a = .1,
       .use_function = false,
-      .debug_mode = false,
+      .debug_mode = true,
       .restart = false,
-      .kill_box =
-          {
-              .x = 0,
-              .y = game->play_area.height - 10,
-              .width = game->play_area.width,
-              .height = 10,
-          },
       .mouse_mode = false,
       .draw_fps = true,
   };
 
-  // Gameloop
-  while (!WindowShouldClose()) {
-    handleInputs(&settings, &ball, &stage, &player);
-    doCollision(&ball, &stage, &player, &settings);
-    movePlayer(&player);
-    if (!settings.mouse_mode) {
-      moveBall(&ball);
-    } else {
-      ball.position.x = GetMouseX() - game->play_area.x;
-      ball.position.y = GetMouseY() - game->play_area.y;
-    }
-    BeginDrawing();
-    {
-      // ############ CLEAR ############
-      ClearBackground(WHITE);
-
-      // ############ PLAYER ############
-      DrawRectangle(player.position.x + game->ui_area.x,
-                    player.position.y + game->play_area.y, player.width, 10,
-                    BLACK);
-
-      // ############ BRICKS ############
-      for (int i = 0; i < stage.brick_count; i++) {
-        if (stage.bricks[i].alive) {
-          DrawRectangle(stage.bricks[i].position.x + game->play_area.x,
-                        stage.bricks[i].position.y + game->play_area.y,
-                        stage.brick_width, stage.brick_height,
-                        stage.bricks[i].color);
-        }
-      }
-
-      // ############ BALL ############
-      DrawRectangle(ball.position.x + game->play_area.x,
-                    ball.position.y + game->play_area.y, ball.size, ball.size,
-                    ball.color);
-
-      // ############ UI ############
-      DrawRectangle(game->ui_area.x, game->ui_area.y, game->ui_area.width,
-                    game->ui_area.height, BLACK);
-
-      DrawText(TextFormat("Score: %d", player.score),
-               game->ui_area.x + game->ui_area.width - 130,
-               game->ui_area.y + game->ui_area.height / 2 - 10, 20, WHITE);
-
-      if (settings.draw_fps) {
-        DrawFPS(0, 0);
-      }
-
-      // ############ DEBUG ############
-      // #ifdef DEBUG
-      if (settings.debug_mode) {
-        visualizePlayer(&player, &settings);
-        visualizeBoxes(&settings);
-        visualizeBricks(&settings, &stage);
-      }
-      // #endif
-    }
-    EndDrawing();
-  }
-
-  // cleanup (here for now)
-  MemFree(stage.bricks);
-}
-
-void cleanup() { CloseWindow(); }
-
-int main(void) {
-
-  int window_width = 800;
-  int window_height = 600;
-  int ui_height = 50;
+  // Camera
+  Camera2D camera = {0};
+  camera.target = (Vector2){0, 0};
+  camera.offset = (Vector2){0, 0};
+  camera.rotation = 0.0f;
+  camera.zoom = .50f;
+  Vector2 camera_velocity = (Vector2){20, 0};
 
   struct Game local_game = {
       .window_size = {window_width, window_height},
@@ -577,10 +583,19 @@ int main(void) {
           {
               .x = 0,
               .y = ui_height,
-              .height = window_height - ui_height,
-              .width = window_width,
+              .height = room_size.y - ui_height,
+              .width = room_size.x,
           },
       .target_fps = 100,
+      .room_size = {1920, 1080},
+      .camera_target = (Vector2){0.0, 0.0},
+      .num_stages = 2,
+      .current_stage = 0,
+      .move_camera = false,
+      .player = &player,
+      .settings = &settings,
+      .camera = camera,
+      .camera_velocity = camera_velocity,
   };
 
   game = &local_game;
