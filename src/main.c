@@ -17,7 +17,7 @@
 // - portals
 
 // TODO: NEXT:
-// conditional rendering (source, target)
+// cleanup time babyyy
 
 // ######################### Global vars ############################
 struct Game *game;

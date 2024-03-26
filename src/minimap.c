@@ -11,10 +11,6 @@ void initMinimap(struct Minimap *mm, struct MinimapSettings settings,
   mm->num_rooms = stage->num_rooms;
 
   for (int i = 0; i < stage->num_rooms; i++) {
-    //    mm->relative_room_positions[stage->rooms[i].id] =
-    //        (Vector2){stage->rooms[i].position_world.x / stage->room_size.x,
-    //                  stage->rooms[i].position_world.y / stage->room_size.y};
-    //
     mm->relative_room_positions[stage->rooms[i].id] =
         (Vector2){stage->rooms[i].position_world.x / 1920,
                   stage->rooms[i].position_world.y / 1080};

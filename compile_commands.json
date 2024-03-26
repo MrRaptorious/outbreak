@@ -1,0 +1,17 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/clang",
+      "-O0",
+      "-v",
+      "-c",
+      "-I../raylib",
+      "-o",
+      "build/main.o",
+      "src/main.c"
+    ],
+    "directory": "/mnt/d/code/c/raylib-aim-trainer",
+    "file": "/mnt/d/code/c/raylib-aim-trainer/src/main.c",
+    "output": "/mnt/d/code/c/raylib-aim-trainer/build/main.o"
+  }
+]
