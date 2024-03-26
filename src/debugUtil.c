@@ -2,9 +2,12 @@
 #include "definitions.h"
 #include <raylib.h>
 #include <raymath.h>
+#include <stdio.h>
 
 void visualizePlayer(struct Game *game, struct Player *player,
-                     struct Settings *settings, struct Room *stage) {
+                     struct Room *stage) {
+
+  struct Settings *settings = game->settings;
   if (settings->use_function) {
     for (int i = 0; i < player->width; i++) {
 
@@ -64,27 +67,30 @@ void visualizePlayer(struct Game *game, struct Player *player,
   }
 }
 
-void visualizeBoxes(struct Game *game, struct Settings *settings,
-                    struct Room *room) {
+void visualizeBoxes(struct Game *game, struct Room *room) {
 
-  DrawRectangle(room->kill_box.x + game->play_area.x + room->position_world.x,
-                room->kill_box.y + game->play_area.y + room->position_world.y,
-                room->kill_box.width, room->kill_box.height,
+  struct Settings *settings = game->settings;
+  Vector2 kill_box_pos = (Vector2){room->kill_box.x, room->kill_box.y};
+
+  Vector2 pos = Vector2Add(kill_box_pos, room->position_world);
+  pos.x += game->play_area.x;
+  pos.y += game->play_area.y;
+
+  DrawRectangle(pos.x, pos.y, room->kill_box.width, room->kill_box.height,
                 (Color){255, 0, 0, 100});
 }
 
-void visualizeBricks(struct Game *game, struct Settings *settings,
-                     struct Room *stage) {
-  for (int i = 0; i < stage->brick_count; i++) {
-    Color transparent = stage->bricks[i].color;
+void visualizeBricks(struct Game *game, struct Room *room) {
+  for (int i = 0; i < room->brick_count; i++) {
+    Color transparent = room->bricks[i].color;
     transparent.a = 50;
 
-    Vector2 pos =
-        Vector2Add(stage->bricks[i].position_room, stage->position_world);
+    Vector2 pos = Vector2Add(room->bricks[i].position_room,
+                             game->current_stage->current_room->position_world);
     pos.x += game->play_area.x;
     pos.y += game->play_area.y;
 
-    DrawRectangle(pos.x, pos.y, stage->brick_width, stage->brick_height,
+    DrawRectangle(pos.x, pos.y, room->brick_width, room->brick_height,
                   transparent);
   }
 }
@@ -95,7 +101,8 @@ void visualizeBall(struct Game *game, struct Ball *ball, struct Room *room) {
   Vector2 origin = (Vector2){ball->position.x + ball->size / 2.0,
                              ball->position.y + ball->size / 2.0};
 
-  origin = Vector2Add(origin, room->position_world);
+  origin =
+      Vector2Add(origin, game->current_stage->current_room->position_world);
   origin.x += game->play_area.x;
   origin.y += game->play_area.y;
 
@@ -106,7 +113,10 @@ void visualizeBall(struct Game *game, struct Ball *ball, struct Room *room) {
 }
 
 void visualizeRoom(struct Game *game) {
-  DrawText(TextFormat("CurrentRoom: %d", game->current_stage->current_room->id),
-           game->ui_area.x + game->ui_area.width - 300,
+  DrawText(TextFormat("CurrentRoom: %d (x:%.2f,y:%.2f)",
+                      game->current_stage->current_room->id,
+                      game->current_stage->current_room->position_world.x,
+                      game->current_stage->current_room->position_world.y),
+           game->ui_area.x + game->ui_area.width - 600,
            game->ui_area.y + game->ui_area.height / 2 - 10, 20, WHITE);
 }

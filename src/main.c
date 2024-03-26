@@ -1,5 +1,6 @@
 #include "debugUtil.h"
 #include "definitions.h"
+#include "minimap.h"
 #include "raylib.h"
 #include "raymath.h"
 #include "roomgenerator.h"
@@ -34,9 +35,6 @@ void spawnBall(struct Ball *ball) {
   ball->direction = (Vector2){-.1, -1};
 }
 // ########################### End Util Functions ###########################
-
-// ############################## Setup Functions ##############################
-// ############################ End Setup Functions ############################
 
 // ############################## Tick Functions ##############################
 void doCollision(struct Ball *ball, struct Room *room, struct Player *player,
@@ -211,69 +209,18 @@ void movePlayer(struct Player *player) {
   }
 }
 
-void handleDebugInputs(struct Settings *settings, struct Ball *ball,
-                       struct Room *room, struct Player *player) {
-  if (IsKeyDown(KEY_V)) {
-    settings->radius += 1;
-  }
-
-  if (IsKeyDown(KEY_B)) {
-    settings->radius -= 1;
-  }
-
-  if (IsKeyDown(KEY_R)) {
-    settings->player_slope_scale += .01;
-    printf("player_slope_scale:%f\n", settings->player_slope_scale);
-  }
-
-  if (IsKeyDown(KEY_T)) {
-    settings->player_slope_scale -= .01;
-    printf("player_slope_scale:%f\n", settings->player_slope_scale);
-  }
-
-  if (IsKeyDown(KEY_F)) {
-    settings->a += .001;
-    printf("a:%f\n", settings->a);
-  }
-
-  if (IsKeyDown(KEY_G)) {
-    settings->a -= .001;
-    printf("a:%f\n", settings->a);
-  }
-}
-
 void handleControlls(struct Settings *settings, struct Player *player,
                      struct Ball *ball, struct Stage *stage) {
   int next_room_id = -1;
 
   if (IsKeyPressed(KEY_A)) {
     next_room_id = getRoom(stage, stage->current_room->id, LEFT);
-    printf("L:current_room_id: %d\n", stage->current_room->id);
-    printf("L:next_room_id: %d\n", next_room_id);
-    printf("L:RoomLocation:x %f,y %f\n",
-           stage->rooms[next_room_id].position_world.x,
-           stage->rooms[next_room_id].position_world.y);
   } else if (IsKeyPressed(KEY_W)) {
     next_room_id = getRoom(stage, stage->current_room->id, TOP);
-    printf("U:current_room_id: %d\n", stage->current_room->id);
-    printf("U:next_room_id: %d\n", next_room_id);
-    printf("U:RoomLocation:x %f,y %f\n",
-           stage->rooms[next_room_id].position_world.x,
-           stage->rooms[next_room_id].position_world.y);
   } else if (IsKeyPressed(KEY_D)) {
     next_room_id = getRoom(stage, stage->current_room->id, RIGHT);
-    printf("R:current_room_id: %d\n", stage->current_room->id);
-    printf("R:next_room_id: %d\n", next_room_id);
-    printf("R:RoomLocation:x %f,y %f\n",
-           stage->rooms[next_room_id].position_world.x,
-           stage->rooms[next_room_id].position_world.y);
   } else if (IsKeyPressed(KEY_S)) {
     next_room_id = getRoom(stage, stage->current_room->id, BOTTOM);
-    printf("B:current_room_id: %d\n", stage->current_room->id);
-    printf("B:next_room_id: %d\n", next_room_id);
-    printf("B:RoomLocation:x %f,y %f\n",
-           stage->rooms[next_room_id].position_world.x,
-           stage->rooms[next_room_id].position_world.y);
   }
 
   if (next_room_id >= 0) {
@@ -304,40 +251,6 @@ void handleControlls(struct Settings *settings, struct Player *player,
     printf("###### MATRIX #####!\n");
     int num_rooms = game->current_stage->num_rooms;
     printf("NUM_ROOMS:%d\n", num_rooms);
-
-    // for (int source_room_index = 0; source_room_index < num_rooms;
-    //      source_room_index++) {
-    //   printf("%d\t", source_room_index);
-    //   for (int target_room = 0; target_room < source_room_index;
-    //        target_room++) {
-    //     int search_offset =
-    //         ((source_room_index * (source_room_index + 1)) / 2) -
-    //         source_room_index;
-
-    //    enum Direction direction =
-    //        game->current_stage->room_layout[search_offset + target_room];
-
-    //    switch (direction) {
-    //    case DIRECTION_NONE:
-    //      printf("0 ");
-    //      break;
-    //    case LEFT:
-    //      printf("L ");
-    //      break;
-    //    case TOP:
-    //      printf("T ");
-    //      break;
-    //    case RIGHT:
-    //      printf("R ");
-    //      break;
-    //    case BOTTOM:
-    //      printf("B ");
-    //      break;
-    //    }
-    //  }
-
-    //  printf("\n");
-    //}
 
     for (int i = 0; i < num_rooms; i++) {
       for (int j = 0; j < num_rooms; j++) {
@@ -405,7 +318,8 @@ void loop() {
   int render_width = game->play_area.width;
   int render_height = game->play_area.height;
   int num_rooms_to_render = 5;
-  struct Room *rooms_to_render[5];
+  // for now just render all rooms
+  struct Room *rooms_to_render[num_rooms_to_render];
 
   struct Ball ball;
   spawnBall(&ball);
@@ -422,20 +336,33 @@ void loop() {
   // set startup room
   //  rooms_to_render[0] = &game->current_stage->rooms[0];
 
-  rooms_to_render[0] = &game->current_stage->rooms[0];
-  rooms_to_render[1] = &game->current_stage->rooms[1];
-  rooms_to_render[2] = &game->current_stage->rooms[2];
-  rooms_to_render[3] = &game->current_stage->rooms[3];
-  rooms_to_render[4] = &game->current_stage->rooms[4];
+  for (int i = 0; i < num_rooms_to_render; i++) {
+    rooms_to_render[i] = &game->current_stage->rooms[i];
+  }
+
   // shortcuts for structs
   struct Player *player = game->player;
   Camera2D *camera = &(game->camera);
   struct Stage *stage = game->current_stage;
-  camera->target = game->current_stage->current_room->position_world;
 
   // camera targets
   struct Room *start = &game->current_stage->rooms[0];
   struct Room *end = &game->current_stage->rooms[0];
+  camera->target = game->current_stage->current_room->position_world;
+
+  // minimap
+  Vector2 room_positions[game->current_stage->num_rooms];
+  struct Minimap mm;
+  struct MinimapSettings mm_settings = {
+      .size = {100, 100},
+      .position = {game->window_size.x - 10 - 100,
+                   game->window_size.y - 10 - 100},
+      .room_color = (Color){255, 255, 255, 128},
+      .background_color = (Color){0, 0, 0, 128},
+  };
+  mm.relative_room_positions = room_positions;
+
+  initMinimap(&mm, mm_settings, game->current_stage);
 
   // Gameloop
   while (!WindowShouldClose()) {
@@ -470,14 +397,7 @@ void loop() {
         camera->target = end->position_world;
       }
 
-      // check what should be rendered
-      //  rooms_to_render[0] = start;
-      // rooms_to_render[1] = end;
-      // num_rooms_to_render = 2;
     } else {
-      // check what should be rendered
-      // num_rooms_to_render = 1;
-      //  rooms_to_render[0] = current_room;
       start = current_room;
       end = current_room;
     }
@@ -524,10 +444,10 @@ void loop() {
       // ############ DEBUG ############
       // #ifdef DEBUG
       if (game->settings->debug_mode) {
-        visualizePlayer(game, player, game->settings, current_room);
-        visualizeBoxes(game, game->settings, current_room);
-        visualizeBricks(game, game->settings, current_room);
-        visualizeBall(game, &ball, current_room);
+        visualizePlayer(game, player, game->current_stage->current_room);
+        visualizeBoxes(game, game->current_stage->current_room);
+        visualizeBricks(game, game->current_stage->current_room);
+        visualizeBall(game, &ball, game->current_stage->current_room);
       }
       // #endif
       EndMode2D();
@@ -544,18 +464,25 @@ void loop() {
         DrawFPS(0, 0);
       }
 
+      drawMinimap(&mm, game->current_stage->current_room->id);
+
       if (game->settings->debug_mode) {
         visualizeRoom(game);
       }
     }
     EndDrawing();
   }
-
-  // TODO:cleanup
-  // cleanup (here for now)
 }
 
-void cleanup() { CloseWindow(); }
+void cleanup() {
+  for (int i = 0; i < game->current_stage->num_rooms; i++) {
+    MemFree(game->current_stage->rooms[i].bricks);
+  }
+
+  MemFree(game->current_stage->rooms);
+
+  CloseWindow();
+}
 
 int main(void) {
   int window_width = 960;
