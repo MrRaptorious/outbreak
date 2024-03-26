@@ -6,14 +6,16 @@
 #include <raymath.h>
 
 void visualizePlayer(struct Game *game, struct Player *player,
-                     struct Settings *settings, struct Stage *stage);
+                     struct Settings *settings, struct Room *room);
 
 void visualizeBoxes(struct Game *game, struct Settings *settings,
-                    struct Stage *stage);
+                    struct Room *room);
 
 void visualizeBricks(struct Game *game, struct Settings *settings,
-                     struct Stage *stage);
+                     struct Room *room);
 
-void visualizeBall(struct Game *game, struct Ball *ball, struct Stage *stage);
+void visualizeBall(struct Game *game, struct Ball *ball, struct Room *room);
+
+void visualizeRoom(struct Game *game);
 
 #endif

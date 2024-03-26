@@ -22,13 +22,13 @@ struct Ball {
 };
 
 struct Brick {
-  Vector2 position_stage;
+  Vector2 position_room;
   int width;
   Color color;
   bool alive;
 };
 
-struct Stage {
+struct Room {
   int id;
   struct Brick *bricks;
   int brick_count;
@@ -37,8 +37,6 @@ struct Stage {
   Vector2 position_world;
   Color base_color;
   Rectangle kill_box;
-  struct Stage *right;
-  struct Stage *left;
 };
 
 struct Settings {
@@ -52,21 +50,41 @@ struct Settings {
   bool draw_fps;
 };
 
+enum Direction {
+  DIRECTION_NONE = 0,
+  LEFT = 1,
+  TOP = 2,
+  RIGHT = 3,
+  BOTTOM = 4,
+};
+
+struct StageSettings {
+  Vector2 room_size;
+  Vector2 kill_box_position;
+  int num_rooms;
+};
+
+struct Stage {
+  int num_rooms;
+  struct Room *rooms;
+  enum Direction *room_layout;
+  Vector2 room_size;
+  int room_layout_length;
+  struct Room *current_room;
+};
+
 struct Game {
   Vector2 window_size;
   Rectangle ui_area;
   Rectangle play_area;
   int target_fps;
-  Vector2 room_size;
   Vector2 camera_target;
-  struct Stage *stages[2];
-  int current_stage;
-  int num_stages;
   bool move_camera;
   struct Player *player;
   struct Settings *settings;
   Camera2D camera;
   Vector2 camera_velocity;
+  struct Stage *current_stage;
 };
 
 #endif

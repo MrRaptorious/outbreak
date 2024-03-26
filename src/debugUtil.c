@@ -4,7 +4,7 @@
 #include <raymath.h>
 
 void visualizePlayer(struct Game *game, struct Player *player,
-                     struct Settings *settings, struct Stage *stage) {
+                     struct Settings *settings, struct Room *stage) {
   if (settings->use_function) {
     for (int i = 0; i < player->width; i++) {
 
@@ -65,22 +65,22 @@ void visualizePlayer(struct Game *game, struct Player *player,
 }
 
 void visualizeBoxes(struct Game *game, struct Settings *settings,
-                    struct Stage *stage) {
+                    struct Room *room) {
 
-  DrawRectangle(stage->kill_box.x + game->play_area.x + stage->position_world.x,
-                stage->kill_box.y + game->play_area.y + stage->position_world.y,
-                stage->kill_box.width, stage->kill_box.height,
+  DrawRectangle(room->kill_box.x + game->play_area.x + room->position_world.x,
+                room->kill_box.y + game->play_area.y + room->position_world.y,
+                room->kill_box.width, room->kill_box.height,
                 (Color){255, 0, 0, 100});
 }
 
 void visualizeBricks(struct Game *game, struct Settings *settings,
-                     struct Stage *stage) {
+                     struct Room *stage) {
   for (int i = 0; i < stage->brick_count; i++) {
     Color transparent = stage->bricks[i].color;
     transparent.a = 50;
 
     Vector2 pos =
-        Vector2Add(stage->bricks[i].position_stage, stage->position_world);
+        Vector2Add(stage->bricks[i].position_room, stage->position_world);
     pos.x += game->play_area.x;
     pos.y += game->play_area.y;
 
@@ -89,13 +89,13 @@ void visualizeBricks(struct Game *game, struct Settings *settings,
   }
 }
 
-void visualizeBall(struct Game *game, struct Ball *ball, struct Stage *stage) {
+void visualizeBall(struct Game *game, struct Ball *ball, struct Room *room) {
 
   float scale = 150;
   Vector2 origin = (Vector2){ball->position.x + ball->size / 2.0,
                              ball->position.y + ball->size / 2.0};
 
-  origin = Vector2Add(origin, stage->position_world);
+  origin = Vector2Add(origin, room->position_world);
   origin.x += game->play_area.x;
   origin.y += game->play_area.y;
 
@@ -103,4 +103,10 @@ void visualizeBall(struct Game *game, struct Ball *ball, struct Stage *stage) {
                  origin.y + ball->direction.y * scale};
 
   DrawLine(origin.x, origin.y, end.x, end.y, NORMAL_COLOR);
+}
+
+void visualizeRoom(struct Game *game) {
+  DrawText(TextFormat("CurrentRoom: %d", game->current_stage->current_room->id),
+           game->ui_area.x + game->ui_area.width - 300,
+           game->ui_area.y + game->ui_area.height / 2 - 10, 20, WHITE);
 }

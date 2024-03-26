@@ -1,8 +1,8 @@
-#include "colorConversion.h"
 #include "debugUtil.h"
 #include "definitions.h"
 #include "raylib.h"
 #include "raymath.h"
+#include "roomgenerator.h"
 #include "structs.h"
 #include <assert.h>
 #include <math.h>
@@ -12,14 +12,11 @@
 
 // TODO:
 // - use delta time!
-// https://learnopengl.com/In-Practice/2D-Game/Collisions/Collision-detection
 // - use shaders
 // - portals
-// - ui with score
-// - create multiple rooms
 
 // TODO: NEXT:
-// enhance room loading
+// conditional rendering (source, target)
 
 // ######################### Global vars ############################
 struct Game *game;
@@ -39,62 +36,10 @@ void spawnBall(struct Ball *ball) {
 // ########################### End Util Functions ###########################
 
 // ############################## Setup Functions ##############################
-void createStage(struct Stage *stage, int id, int num_bricks_in_row, int rows,
-                 Vector2 position_world, Color base_color) {
-  stage->id = id;
-  stage->base_color = base_color;
-  stage->brick_count = num_bricks_in_row * rows;
-  stage->position_world = position_world;
-  stage->kill_box = (Rectangle){
-      .x = 0,
-      .y = game->play_area.height,
-      .width = game->play_area.width,
-      .height = 20,
-  };
-
-  int render_width = game->play_area.width;
-  int brick_height = 50;
-  float padding = 2;
-  int base_offset = 50;
-
-  float brick_width = (render_width - (padding * (num_bricks_in_row + 1))) /
-                      (num_bricks_in_row);
-
-  struct Brick *bricks;
-  bricks = MemAlloc(sizeof(struct Brick) * num_bricks_in_row * rows);
-
-  if (!bricks) {
-    // handel error... or do we?
-  }
-
-  for (int row = 0; row < rows; row++) {
-    int y_pos = base_offset + (row * (brick_height + padding));
-
-    Vector3 hsl_color =
-        rgb2hsl(stage->base_color.r, stage->base_color.g, stage->base_color.b);
-
-    hsl_color.z += 0.1 * (row + 1);
-
-    Color row_color = hsl2rgb(hsl_color.x, hsl_color.y, hsl_color.z);
-
-    for (int column = 0; column < num_bricks_in_row; column++) {
-      int position = (row * num_bricks_in_row) + column;
-      bricks[position].color = row_color;
-      bricks[position].position_stage.y = y_pos;
-      bricks[position].position_stage.x =
-          padding + brick_width * column + padding * column;
-      bricks[position].alive = true;
-    }
-  }
-
-  stage->bricks = bricks;
-  stage->brick_width = brick_width;
-  stage->brick_height = brick_height;
-}
 // ############################ End Setup Functions ############################
 
 // ############################## Tick Functions ##############################
-void doCollision(struct Ball *ball, struct Stage *stage, struct Player *player,
+void doCollision(struct Ball *ball, struct Room *room, struct Player *player,
                  struct Settings *settings) {
   // go through each brick and check collision with the ball
   // for now use AABB Collision with Ball
@@ -106,28 +51,28 @@ void doCollision(struct Ball *ball, struct Stage *stage, struct Player *player,
   };
 
   // death zone
-  if (CheckCollisionRecs(stage->kill_box, ball_box)) {
+  if (CheckCollisionRecs(room->kill_box, ball_box)) {
     settings->restart = true;
   }
 
   // bricks
   bool reflected_current_frame = false;
-  for (int i = 0; i < stage->brick_count; i++) {
+  for (int i = 0; i < room->brick_count; i++) {
 
-    if (stage->bricks[i].alive) {
+    if (room->bricks[i].alive) {
 
       Rectangle brick_collision = {
-          .x = stage->bricks[i].position_stage.x,
-          .y = stage->bricks[i].position_stage.y,
-          .width = stage->brick_width,
-          .height = stage->brick_height,
+          .x = room->bricks[i].position_room.x,
+          .y = room->bricks[i].position_room.y,
+          .width = room->brick_width,
+          .height = room->brick_height,
       };
 
       // only check if brick is alive
-      if (stage->bricks[i].alive) {
+      if (room->bricks[i].alive) {
         if (CheckCollisionRecs(brick_collision, ball_box)) {
           // kill brick
-          stage->bricks[i].alive = false;
+          room->bricks[i].alive = false;
 
           if (!reflected_current_frame) {
             // TODO: reflect based on hit position!
@@ -267,7 +212,7 @@ void movePlayer(struct Player *player) {
 }
 
 void handleDebugInputs(struct Settings *settings, struct Ball *ball,
-                       struct Stage *stage, struct Player *player) {
+                       struct Room *room, struct Player *player) {
   if (IsKeyDown(KEY_V)) {
     settings->radius += 1;
   }
@@ -298,26 +243,46 @@ void handleDebugInputs(struct Settings *settings, struct Ball *ball,
 }
 
 void handleControlls(struct Settings *settings, struct Player *player,
-                     struct Ball *ball) {
-  if (IsKeyPressed(KEY_S)) {
-    if (game->current_stage > 0) {
-      game->current_stage--;
-      game->move_camera = true;
-      game->player->is_holding_ball = true;
+                     struct Ball *ball, struct Stage *stage) {
+  int next_room_id = -1;
 
-      if (ball->direction.y > 0) {
-        ball->direction.y = -ball->direction.y;
-      }
-    }
-  } else if (IsKeyPressed(KEY_F)) {
-    if (game->current_stage < game->num_stages - 1) {
-      game->current_stage++;
-      game->move_camera = true;
-      game->player->is_holding_ball = true;
+  if (IsKeyPressed(KEY_A)) {
+    next_room_id = getRoom(stage, stage->current_room->id, LEFT);
+    printf("L:current_room_id: %d\n", stage->current_room->id);
+    printf("L:next_room_id: %d\n", next_room_id);
+    printf("L:RoomLocation:x %f,y %f\n",
+           stage->rooms[next_room_id].position_world.x,
+           stage->rooms[next_room_id].position_world.y);
+  } else if (IsKeyPressed(KEY_W)) {
+    next_room_id = getRoom(stage, stage->current_room->id, TOP);
+    printf("U:current_room_id: %d\n", stage->current_room->id);
+    printf("U:next_room_id: %d\n", next_room_id);
+    printf("U:RoomLocation:x %f,y %f\n",
+           stage->rooms[next_room_id].position_world.x,
+           stage->rooms[next_room_id].position_world.y);
+  } else if (IsKeyPressed(KEY_D)) {
+    next_room_id = getRoom(stage, stage->current_room->id, RIGHT);
+    printf("R:current_room_id: %d\n", stage->current_room->id);
+    printf("R:next_room_id: %d\n", next_room_id);
+    printf("R:RoomLocation:x %f,y %f\n",
+           stage->rooms[next_room_id].position_world.x,
+           stage->rooms[next_room_id].position_world.y);
+  } else if (IsKeyPressed(KEY_S)) {
+    next_room_id = getRoom(stage, stage->current_room->id, BOTTOM);
+    printf("B:current_room_id: %d\n", stage->current_room->id);
+    printf("B:next_room_id: %d\n", next_room_id);
+    printf("B:RoomLocation:x %f,y %f\n",
+           stage->rooms[next_room_id].position_world.x,
+           stage->rooms[next_room_id].position_world.y);
+  }
 
-      if (ball->direction.y > 0) {
-        ball->direction.y = -ball->direction.y;
-      }
+  if (next_room_id >= 0) {
+    stage->current_room = &stage->rooms[next_room_id];
+    game->move_camera = true;
+    game->player->is_holding_ball = true;
+
+    if (ball->direction.y > 0) {
+      ball->direction.y = -ball->direction.y;
     }
   }
 
@@ -325,7 +290,7 @@ void handleControlls(struct Settings *settings, struct Player *player,
     game->player->is_holding_ball = false;
   }
 
-  if (IsKeyPressed(KEY_D)) {
+  if (IsKeyPressed(KEY_T)) {
 
     settings->debug_mode = !settings->debug_mode;
     if (settings->debug_mode) {
@@ -333,6 +298,75 @@ void handleControlls(struct Settings *settings, struct Player *player,
     } else {
       printf("Debug-mode disabled\n");
     }
+  }
+
+  if (IsKeyPressed(KEY_P)) {
+    printf("###### MATRIX #####!\n");
+    int num_rooms = game->current_stage->num_rooms;
+    printf("NUM_ROOMS:%d\n", num_rooms);
+
+    // for (int source_room_index = 0; source_room_index < num_rooms;
+    //      source_room_index++) {
+    //   printf("%d\t", source_room_index);
+    //   for (int target_room = 0; target_room < source_room_index;
+    //        target_room++) {
+    //     int search_offset =
+    //         ((source_room_index * (source_room_index + 1)) / 2) -
+    //         source_room_index;
+
+    //    enum Direction direction =
+    //        game->current_stage->room_layout[search_offset + target_room];
+
+    //    switch (direction) {
+    //    case DIRECTION_NONE:
+    //      printf("0 ");
+    //      break;
+    //    case LEFT:
+    //      printf("L ");
+    //      break;
+    //    case TOP:
+    //      printf("T ");
+    //      break;
+    //    case RIGHT:
+    //      printf("R ");
+    //      break;
+    //    case BOTTOM:
+    //      printf("B ");
+    //      break;
+    //    }
+    //  }
+
+    //  printf("\n");
+    //}
+
+    for (int i = 0; i < num_rooms; i++) {
+      for (int j = 0; j < num_rooms; j++) {
+        int search_offset = i * num_rooms;
+
+        enum Direction direction =
+            game->current_stage->room_layout[search_offset + j];
+
+        switch (direction) {
+        case DIRECTION_NONE:
+          printf("0 ");
+          break;
+        case LEFT:
+          printf("L ");
+          break;
+        case TOP:
+          printf("T ");
+          break;
+        case RIGHT:
+          printf("R ");
+          break;
+        case BOTTOM:
+          printf("B ");
+          break;
+        }
+      }
+      printf("\n");
+    }
+    printf("###### END #####!\n");
   }
 
   if (IsKeyPressed(KEY_N) || settings->restart) {
@@ -363,8 +397,6 @@ void handleControlls(struct Settings *settings, struct Player *player,
 void init() {
   printf("Raylib Version: %s", RAYLIB_VERSION);
 
-  assert(game != NULL);
-
   InitWindow(game->window_size.x, game->window_size.y, "Outbreak");
   SetTargetFPS(game->target_fps);
 }
@@ -372,84 +404,82 @@ void init() {
 void loop() {
   int render_width = game->play_area.width;
   int render_height = game->play_area.height;
-  struct Stage *stages_to_render[2];
-  int num_stages_to_render = 1;
+  int num_rooms_to_render = 5;
+  struct Room *rooms_to_render[5];
 
   struct Ball ball;
   spawnBall(&ball);
 
-  struct Stage stage1 = {};
-  createStage(&stage1, 1, 20, 3, (Vector2){0, 0}, (Color){19, 19, 69, 255});
+  struct StageSettings stage_settings = {
+      .num_rooms = 5,
+      .room_size = (Vector2){1920, 1080},
+      .kill_box_position = (Vector2){0, 1080 - 20},
+  };
 
-  struct Stage stage2 = {};
-  createStage(&stage2, 2, 20, 3, (Vector2){1920, 0}, (Color){69, 19, 46, 255});
+  game->current_stage = generateStage(stage_settings);
+  game->current_stage->current_room = &game->current_stage->rooms[0];
 
-  // link stages
-  stage1.right = &stage2;
-  stage1.left = NULL;
-  stage2.left = &stage1;
-  stage2.right = NULL;
+  // set startup room
+  //  rooms_to_render[0] = &game->current_stage->rooms[0];
 
-  game->current_stage = 0;
-  game->stages[0] = &stage1;
-  game->stages[1] = &stage2;
-  game->num_stages = 2;
-
-  // set startup stage
-  stages_to_render[0] = &stage1;
-
+  rooms_to_render[0] = &game->current_stage->rooms[0];
+  rooms_to_render[1] = &game->current_stage->rooms[1];
+  rooms_to_render[2] = &game->current_stage->rooms[2];
+  rooms_to_render[3] = &game->current_stage->rooms[3];
+  rooms_to_render[4] = &game->current_stage->rooms[4];
   // shortcuts for structs
   struct Player *player = game->player;
   Camera2D *camera = &(game->camera);
+  struct Stage *stage = game->current_stage;
+  camera->target = game->current_stage->current_room->position_world;
 
   // camera targets
-  struct Stage *start = &stage1;
-  struct Stage *end = &stage1;
+  struct Room *start = &game->current_stage->rooms[0];
+  struct Room *end = &game->current_stage->rooms[0];
 
   // Gameloop
   while (!WindowShouldClose()) {
-    struct Stage *old_stage = game->stages[game->current_stage];
+    struct Room *old_room = stage->current_room;
 
     // ##### Update #####
     // Update stuff like movement, collision etc.
-    handleControlls(game->settings, player, &ball);
-    doCollision(&ball, game->stages[game->current_stage], player,
-                game->settings);
+    handleControlls(game->settings, player, &ball, stage);
+    doCollision(&ball, stage->current_room, player, game->settings);
     movePlayer(player);
     moveBall(game, &ball);
 
-    struct Stage *current_stage = game->stages[game->current_stage];
+    struct Room *current_room = stage->current_room;
 
     // ##### Late-Update #####
     // Update stuff which depends on the updated values of before, like camera
     // movement etc.
     if (game->move_camera) {
-      start = old_stage;
-      end = current_stage;
+      start = old_room;
+      end = current_room;
       game->move_camera = false;
     }
 
-    if (fabs(end->position_world.x - camera->target.x) > 5) {
+    if (Vector2Distance(end->position_world, camera->target) > 5) {
       // move camera
       Vector2 smoothed =
           Vector2Lerp(game->camera.target, end->position_world, 0.04);
       camera->target = smoothed;
 
       // calculate next move to snap to target
-      if (fabs(end->position_world.x - camera->target.x) <= 5) {
+      if (Vector2Distance(end->position_world, camera->target) < 5) {
         camera->target = end->position_world;
       }
 
       // check what should be rendered
-      stages_to_render[0] = start;
-      stages_to_render[1] = end;
-      num_stages_to_render = 2;
+      //  rooms_to_render[0] = start;
+      // rooms_to_render[1] = end;
+      // num_rooms_to_render = 2;
     } else {
       // check what should be rendered
-      num_stages_to_render = 1;
-      stages_to_render[0] = current_stage;
-      start = current_stage;
-      end = current_stage;
+      // num_rooms_to_render = 1;
+      //  rooms_to_render[0] = current_room;
+      start = current_room;
+      end = current_room;
     }
 
     // ##### Render #####
@@ -461,43 +491,43 @@ void loop() {
 
       // ############ PLAYER ############
       DrawRectangle(player->position.x + game->ui_area.x +
-                        current_stage->position_world.x,
+                        current_room->position_world.x,
                     player->position.y + game->play_area.y +
-                        current_stage->position_world.y,
+                        current_room->position_world.y,
                     player->width, 10, BLACK);
 
       // ############ BRICKS ############
 
-      for (int i = 0; i < num_stages_to_render; i++) {
+      for (int i = 0; i < num_rooms_to_render; i++) {
 
-        current_stage = stages_to_render[i];
+        current_room = rooms_to_render[i];
 
-        for (int i = 0; i < current_stage->brick_count; i++) {
-          if (current_stage->bricks[i].alive) {
+        for (int i = 0; i < current_room->brick_count; i++) {
+          if (current_room->bricks[i].alive) {
             DrawRectangle(
-                current_stage->bricks[i].position_stage.x + game->play_area.x +
-                    current_stage->position_world.x,
-                current_stage->bricks[i].position_stage.y + game->play_area.y +
-                    current_stage->position_world.y,
-                current_stage->brick_width, current_stage->brick_height,
-                current_stage->bricks[i].color);
+                current_room->bricks[i].position_room.x + game->play_area.x +
+                    current_room->position_world.x,
+                current_room->bricks[i].position_room.y + game->play_area.y +
+                    current_room->position_world.y,
+                current_room->brick_width, current_room->brick_height,
+                current_room->bricks[i].color);
           }
         }
       }
 
       // ############ BALL ############
       DrawRectangle(
-          ball.position.x + game->play_area.x + current_stage->position_world.x,
-          ball.position.y + game->play_area.y + current_stage->position_world.y,
+          ball.position.x + game->play_area.x + current_room->position_world.x,
+          ball.position.y + game->play_area.y + current_room->position_world.y,
           ball.size, ball.size, ball.color);
 
       // ############ DEBUG ############
       // #ifdef DEBUG
       if (game->settings->debug_mode) {
-        visualizePlayer(game, player, game->settings, current_stage);
-        visualizeBoxes(game, game->settings, current_stage);
-        visualizeBricks(game, game->settings, current_stage);
-        visualizeBall(game, &ball, current_stage);
+        visualizePlayer(game, player, game->settings, current_room);
+        visualizeBoxes(game, game->settings, current_room);
+        visualizeBricks(game, game->settings, current_room);
+        visualizeBall(game, &ball, current_room);
       }
       // #endif
       EndMode2D();
@@ -513,13 +543,16 @@ void loop() {
       if (game->settings->draw_fps) {
         DrawFPS(0, 0);
       }
+
+      if (game->settings->debug_mode) {
+        visualizeRoom(game);
+      }
     }
     EndDrawing();
   }
 
+  // TODO:cleanup
   // cleanup (here for now)
-  MemFree(stage1.bricks);
-  MemFree(stage2.bricks);
 }
 
 void cleanup() { CloseWindow(); }
@@ -587,10 +620,8 @@ int main(void) {
               .width = room_size.x,
           },
       .target_fps = 100,
-      .room_size = {1920, 1080},
+      //      .room_size = {1920, 1080},
       .camera_target = (Vector2){0.0, 0.0},
-      .num_stages = 2,
-      .current_stage = 0,
       .move_camera = false,
       .player = &player,
       .settings = &settings,
