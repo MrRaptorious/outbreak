@@ -12,6 +12,8 @@ struct Minimap {
   Vector2 *relative_room_positions;
   int num_rooms;
   Vector2 current_position;
+  RenderTexture2D texture;
+  enum Direction *layout;
 };
 
 struct MinimapSettings {

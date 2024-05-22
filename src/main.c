@@ -1,10 +1,10 @@
-#include "debugUtil.h"
 #include "definitions.h"
 #include "minimap.h"
 #include "raylib.h"
 #include "raymath.h"
 #include "roomgenerator.h"
 #include "structs.h"
+#include "util/debugUtil.h"
 #include <assert.h>
 #include <math.h>
 #include <stdbool.h>
@@ -317,7 +317,7 @@ void init() {
 void loop() {
   int render_width = game->play_area.width;
   int render_height = game->play_area.height;
-  int num_rooms_to_render = 5;
+  int num_rooms_to_render = 10;
   // for now just render all rooms
   struct Room *rooms_to_render[num_rooms_to_render];
 
@@ -325,7 +325,7 @@ void loop() {
   spawnBall(&ball);
 
   struct StageSettings stage_settings = {
-      .num_rooms = 5,
+      .num_rooms = num_rooms_to_render,
       .room_size = (Vector2){1920, 1080},
       .kill_box_position = (Vector2){0, 1080 - 20},
   };
@@ -362,7 +362,9 @@ void loop() {
   };
   mm.relative_room_positions = room_positions;
 
+  BeginDrawing();
   initMinimap(&mm, mm_settings, game->current_stage);
+  EndDrawing();
 
   // Gameloop
   while (!WindowShouldClose()) {

@@ -1,6 +1,6 @@
 #include "roomgenerator.h"
-#include "colorConversion.h"
 #include "structs.h"
+#include "util/colorConversion.h"
 #include <assert.h>
 #include <raylib.h>
 #include <raymath.h>

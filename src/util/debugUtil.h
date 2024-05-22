@@ -1,7 +1,7 @@
 #ifndef DEBUG_MODE
 #define DEBUG_MODE
 
-#include "structs.h"
+#include "../structs.h"
 #include <raylib.h>
 #include <raymath.h>
 
